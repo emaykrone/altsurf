@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Тестовая страница пикселя Tomi.ai</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            padding: 20px;
+            background-color: #f4f4f4;
+            color: #333;
+        }
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+            background-color: #fff;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+        }
+        h1, h2 {
+            color: #0056b3;
+        }
+        p {
+            line-height: 1.6;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        input[type="email"],
+        input[type="tel"],
+        input[type="text"] {
+            width: calc(100% - 22px);
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 16px;
+        }
+        button {
+            background-color: #007bff;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        #response-message {
+            margin-top: 20px;
+            padding: 10px;
+            border-radius: 4px;
+            display: none; /* Скрыто по умолчанию */
+        }
+        #response-message.success {
+            background-color: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        #response-message.error {
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Привет! Это тестовая страница для нашего пикселя.</h1>
+        <p>Открой консоль разработчика (F12), чтобы увидеть логи пикселя.</p>
+
+        <hr>
+
+        <h2>Оставить заявку</h2>
+        <form id="leadForm">
+            <div class="form-group">
+                <label for="email">Email</label>
+                <input type="email" id="email" name="email" placeholder="email@example.com">
+            </div>
+            <div class="form-group">
+                <label for="phone">Телефон</label>
+                <input type="tel" id="phone" name="phone" placeholder="+79991234567">
+            </div>
+            <div class="form-group">
+                <label for="importantFeature">Важная фича (например, город)</label>
+                <input type="text" id="importantFeature" name="importantFeature" placeholder="Москва">
+            </div>
+            <button type="submit">Отправить заявку</button>
+        </form>
+        <div id="response-message"></div>
+    </div>
+
+    <script>
+        (function() {
+            // Уникальный ID пикселя, полученный из Django Admin для вашего проекта
+            const PROJECT_ID = '83b16879-5a1c-4a7a-979f-9cd6befa9739'; 
+            const API_ENDPOINT = 'http://127.0.0.1:8000/api/event/';
+
+            console.log("My Pixel initialized.");
+
+            // Функция для генерации случайного ID клиента (для простоты)
+            function generateClientId() {
+                return 'client_' + Math.random().toString(36).substr(2, 9);
+            }
+
+            // Функция для получения или создания ID клиента
+            function getClientId() {
+                let clientId = localStorage.getItem('tomi_client_id');
+                if (!clientId) {
+                    clientId = generateClientId();
+                    localStorage.setItem('tomi_client_id', clientId);
+                }
+                return clientId;
+            }
+
+            const clientId = getClientId();
+            console.log('Client ID:', clientId);
+
+            function trackEvent(eventName, payload = {}) {
+                const data = {
+                    pixel_id: PROJECT_ID, // <-- Здесь используем 'pixel_id'
+                    event_name: eventName,
+                    client_timestamp: Date.now(),
+                    session_id: 'session_' + Date.now(), // Простой session_id для примера
+                    client_id: clientId,
+                    user_agent: navigator.userAgent,
+                    url: window.location.href,
+                    referrer: document.referrer,
+                    ...payload
+                };
+
+                fetch(API_ENDPOINT, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(data),
+                })
+                .then(response => {
+                    const responseMessage = document.getElementById('response-message');
+                    if (response.status === 204) {
+                        console.log(`Pixel event '${eventName}' sent successfully (204 No Content)`);
+                        responseMessage.className = 'success';
+                        responseMessage.textContent = `Событие '${eventName}' успешно отправлено (204 No Content)`;
+                        responseMessage.style.display = 'block';
+                    } else if (response.ok) {
+                        console.log(`Pixel event '${eventName}' sent successfully (${response.status})`);
+                        responseMessage.className = 'success';
+                        responseMessage.textContent = `Событие '${eventName}' успешно отправлено (${response.status})`;
+                        responseMessage.style.display = 'block';
+                    } else {
+                        return response.json().then(errorData => { // Парсим JSON, если это возможно
+                            const errorMessage = `Failed to send pixel event '${eventName}': ${response.status} ${response.statusText}. Details: ${JSON.stringify(errorData)}`;
+                            console.error(errorMessage);
+                            responseMessage.className = 'error';
+                            responseMessage.textContent = `Ошибка при отправке события '${eventName}': ${response.status}. Подробности: ${JSON.stringify(errorData)}`;
+                            responseMessage.style.display = 'block';
+                            throw new Error(errorMessage);
+                        }).catch(() => { // Если JSON не распарсился
+                            return response.text().then(text => {
+                                const errorMessage = `Failed to send pixel event '${eventName}': ${response.status} ${response.statusText}. Details: ${text}`;
+                                console.error(errorMessage);
+                                responseMessage.className = 'error';
+                                responseMessage.textContent = `Ошибка при отправке события '${eventName}': ${response.status}. Подробности: ${text}`;
+                                responseMessage.style.display = 'block';
+                                throw new Error(errorMessage);
+                            });
+                        });
+                    }
+                })
+                .catch(error => {
+                    const responseMessage = document.getElementById('response-message');
+                    console.error(`Error sending pixel event '${eventName}':`, error);
+                    responseMessage.className = 'error';
+                    responseMessage.textContent = `Произошла ошибка сети при отправке события '${eventName}': ${error.message}`;
+                    responseMessage.style.display = 'block';
+                });
+            }
+
+            // Отправка события 'page_view' при загрузке страницы
+            window.addEventListener('load', () => {
+                trackEvent('page_view');
+            });
+
+            // Обработчик формы для события 'lead_submit'
+            const leadForm = document.getElementById('leadForm');
+            if (leadForm) {
+                leadForm.addEventListener('submit', function(event) {
+                    event.preventDefault(); // Предотвращаем стандартную отправку формы
+
+                    const email = document.getElementById('email').value;
+                    const phone = document.getElementById('phone').value;
+                    const importantFeature = document.getElementById('importantFeature').value;
+
+                    const payload = {
+                        em: email || null, // Отправляем null, если поле пустое
+                        ph: phone || null,
+                        lid: 'lid_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5), // Простой уникальный ID лида
+                        uid: clientId, // Использование clientId как uid
+                        data: {}
+                    };
+
+                    // Добавляем дополнительные фичи, только если они не пустые
+                    if (importantFeature) {
+                        payload.data.any_important_feature = importantFeature;
+                    }
+
+                    // Отправляем событие 'lead_submit'
+                    trackEvent('lead_submit', payload);
+
+                    // Очистка полей формы (опционально)
+                    leadForm.reset();
+                });
+            }
+        })();
+    </script>
+</body>
+</html>
